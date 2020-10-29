@@ -1,0 +1,4 @@
+default:
+  url: https://1.2.3.4:8100
+  username: veeam
+  password: p@ssw0rd
