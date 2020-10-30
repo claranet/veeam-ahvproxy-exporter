@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"fmt"
+
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 
@@ -67,94 +69,120 @@ func (e *ahvProxyExporter) Describe(ch chan<- *prometheus.Desc) {
 	e.metrics["protected_vms"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "protected_vms",
-				Help:      ""},
+				Help:      "Number of Protected VMs on the Cluster"},
 				[]string{})
 	e.metrics["protected_vms"].Describe(ch)
 
 	e.metrics["unprotected_vms"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "unprotected_vms",
-				Help:      ""},
+				Help:      "Number of Unprotected vms on the Cluster"},
 				[]string{})
 	e.metrics["unprotected_vms"].Describe(ch)
 
 	e.metrics["total_vms"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "total_vms",
-				Help:      ""},
+				Help:      "Number of total vms on the Cluster"},
 				[]string{})
 	e.metrics["total_vms"].Describe(ch)
 
 	e.metrics["snapshot_protected_vms"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "snapshot_protected_vms",
-				Help:      ""},
+				Help:      "Number of VMs protected by snapshot"},
 				[]string{})
 	e.metrics["snapshot_protected_vms"].Describe(ch)
 
 	e.metrics["job_count"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_count",
-				Help: ""},
+				Help:      "Numnber of Jobs Managed by the Proxy"},
 				[]string{})
 	e.metrics["job_count"].Describe(ch)
 
-	jobs_labels := []string{"id", "name", "type"}
+	jobs_labels := []string{"job_id", "job_name", "job_type"}
 	e.metrics["job_state"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_state",
-				Help: ""},
+				Help:      "Status of the Backup Job - 0 - Success, 1 - Warning, 3 - Error, 4 - Unknown"},
 				jobs_labels)
 	e.metrics["job_state"].Describe(ch)
 
 	e.metrics["job_vms_count"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_vms_count",
-				Help: ""},
+				Help:      "Number of VMs Protected by this Job"},
 				jobs_labels)
 	e.metrics["job_vms_count"].Describe(ch)
 
 	e.metrics["job_next_run"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_next_run",
-				Help: ""},
+				Help:      "Unix Timestamp of next scheduled run"},
 				jobs_labels)
 	e.metrics["job_next_run"].Describe(ch)
 
 	e.metrics["job_last_run"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_last_run",
-				Help: ""},
+				Help:      "Unix Timestamp of last run"},
 				jobs_labels)
 	e.metrics["job_last_run"].Describe(ch)
 
 	e.metrics["job_last_scheduled"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_last_scheduled",
-				Help: ""},
+				Help:      "Unix Timestamp of last scheduled"},
 				jobs_labels)
 	e.metrics["job_last_scheduled"].Describe(ch)
 
 	e.metrics["job_creation_date"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_creation_date",
-				Help: ""},
+				Help:      "Unix Timestamp of when the job was created"},
 				jobs_labels)
 	e.metrics["job_creation_date"].Describe(ch)
 
 	e.metrics["job_modification_date"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_modification_date",
-				Help: ""},
+				Help:      "Unix Timestamp of when the job was modified"},
 				jobs_labels)
 	e.metrics["job_modification_date"].Describe(ch)
 
 	e.metrics["job_status"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_status",
-				Help: ""},
-				append(jobs_labels, "status"))
+				Help:      "Status of the job"},
+				append(jobs_labels, "job_status"))
 	e.metrics["job_status"].Describe(ch)
+
+	e.DescribeJobVm(ch)
+}
+
+func (e *ahvProxyExporter) DescribeJobVm(ch chan<- *prometheus.Desc) {
+	job_vm_labels := []string{"job_id", "vm_id", "vm_name"}
+	e.metrics["job_vm_last_success"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: e.namespace,
+				Name:      "job_vm_last_success",
+				Help:      ""},
+				job_vm_labels)
+	e.metrics["job_vm_last_success"].Describe(ch)
+
+	e.metrics["job_vm_restore_points"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: e.namespace,
+				Name:      "job_vm_restore_points",
+				Help:      ""},
+				job_vm_labels)
+	e.metrics["job_vm_restore_points"].Describe(ch)
+
+	e.metrics["job_vm_size_bytes"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: e.namespace,
+				Name:      "job_vm_size_bytes",
+				Help:      ""},
+				job_vm_labels)
+	e.metrics["job_vm_size_bytes"].Describe(ch)
 }
 
 // Collect - Implemente prometheus.Collector interface
@@ -245,8 +273,36 @@ func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 		}
 		g.Set(e.valueToFloat64(value))
 		g.Collect(ch)
+
+		e.CollectJobVms(ent["Id"].(string), ent["vmsUids"].([]interface{}), ch)
 	}
 }
+
+func (e *ahvProxyExporter) CollectJobVms(jobid string, vmids []interface{}, ch chan<- prometheus.Metric) {
+	for _, vmid := range vmids {
+		urlpath := fmt.Sprintf("/api/v1/vms/%s", vmid.(string))
+		resp, _ := e.api.makeRequest("GET", urlpath)
+		
+		var ent map[string]interface{}
+		data := json.NewDecoder(resp.Body)
+		data.Decode(&ent)
+
+		g := e.metrics["job_vm_restore_points"].WithLabelValues(jobid, ent["Id"].(string), ent["name"].(string))
+		g.Set(ent["recoveryPoints"].(float64))
+		g.Collect(ch)
+
+		g = e.metrics["job_vm_last_success"].WithLabelValues(jobid, ent["Id"].(string), ent["name"].(string))
+		g.Set(e.dateToUnixTimestamp(ent["lastSuccess"].(string)))
+		g.Collect(ch)
+
+		g = e.metrics["job_vm_size_bytes"].WithLabelValues(jobid, ent["Id"].(string), ent["name"].(string))
+		g.Set(ent["sizeInBytes"].(float64))
+		g.Collect(ch)
+
+	}
+}
+
+
 
 // NewHostsCollector
 func NewAhvProxyExporter(_api *AHVProxy) *ahvProxyExporter {
