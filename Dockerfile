@@ -26,6 +26,6 @@ WORKDIR /
 COPY --from=builder /veeam-ahvproxy-exporter/veeam-ahvproxy-exporter /usr/local/bin/veeam-ahvproxy-exporter
 RUN touch /config.yml
 
-EXPOSE 9404
+EXPOSE 9760
 ENTRYPOINT ["/usr/local/bin/veeam-ahvproxy-exporter"]
 CMD [ "-exporter.conf", "/config.yml" ]
