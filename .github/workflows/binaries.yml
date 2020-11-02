@@ -35,7 +35,7 @@ jobs:
       - run: go env
       - run: go get -d
       - run: |
-          OUTFILE="veeam-ahv-exporter-${PROJECT_VERSION}.${{matrix.goos}}-${{matrix.goarch}}"
+          OUTFILE="veeam-ahvexporter-${PROJECT_VERSION}.${{matrix.goos}}-${{matrix.goarch}}"
           [[ "${GOOS}" == "windows" ]] && OUTFILE="${OUTFILE}.exe"
           go build -a -tags netgo -ldflags -w -o ./bin/${OUTFILE}
       - run: ls -l ./bin/
@@ -44,7 +44,7 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: bin/*
-          asset_name: veeam-ahv-exporter-${PROJECT_VERSION}.${{matrix.goos}}-${{matrix.goarch}}
+          asset_name: veeam-ahvexporter-${PROJECT_VERSION}.${{matrix.goos}}-${{matrix.goarch}}
           tag: ${{ github.ref }}
           overwrite: true
           body: "Release Version ${PROJECT_VERSION}"
