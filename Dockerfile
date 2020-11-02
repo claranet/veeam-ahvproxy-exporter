@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -tags netgo -ldflags -w
 FROM quay.io/prometheus/busybox:latest
 
 LABEL description "Prometheus exporter for VEEAM AHV Proxies" \
-      version "v0.2.0" \
+      version "v0.2.1" \
       maintainer "Martin Weber <martin.weber@de.clara.net>"
 
 WORKDIR /
