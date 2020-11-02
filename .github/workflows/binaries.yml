@@ -1,0 +1,51 @@
+name: Build Binaries
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  
+  binaries:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+
+    env:
+      PROJECT_VERSION: 0.2.1
+      GOARCH: ${{matrix.goarch}}
+      GOOS: ${{matrix.goos}}
+
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64,386]
+        exclude:
+          - goos: darwin
+            goarch: 386
+          
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.15'
+      - run: mkdir -p bin/
+      - run: go env
+      - run: go get -d
+      - run: |
+          OUTFILE="veeam-ahv-exporter-${PROJECT_VERSION}.${{matrix.goos}}-${{matrix.goarch}}"
+          [[ "${GOOS}" == "windows" ]] && OUTFILE="${OUTFILE}.exe"
+          go build -a -tags netgo -ldflags -w -o ./bin/${OUTFILE}
+      - run: ls -l ./bin/
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: bin/*
+          asset_name: veeam-ahv-exporter-${PROJECT_VERSION}.${{matrix.goos}}-${{matrix.goarch}}
+          tag: ${{ github.ref }}
+          overwrite: true
+          body: "Release Version ${PROJECT_VERSION}"
+          file_glob: true
