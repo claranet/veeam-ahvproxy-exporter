@@ -46,7 +46,7 @@ func (e *ahvProxyExporter) valueToFloat64(value interface{}) float64 {
 
 func (e *ahvProxyExporter) dateToUnixTimestamp(value string) float64 {
 
-	layout := "01/02/06 3:04:05 PM"
+	layout := "1/2/06 3:04:05 PM"
 	t, _ := time.Parse(layout, value)
 	log.Debugf("Convert '%s' to Timestamp '%s'",value, t.Unix())
 	return float64(t.Unix())
