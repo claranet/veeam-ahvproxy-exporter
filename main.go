@@ -3,7 +3,7 @@
 //
 // 
 //
-// Version: v0.2.2
+// Version: v0.2.3
 // Author: Martin Weber <martin.weber@de.clara.net>
 // Company: Claranet GmbH
 //

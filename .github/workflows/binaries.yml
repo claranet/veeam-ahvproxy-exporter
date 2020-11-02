@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      PROJECT_VERSION: 0.2.2
+      PROJECT_VERSION: 0.2.3
       GOARCH: ${{matrix.goarch}}
       GOOS: ${{matrix.goos}}
 
