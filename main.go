@@ -31,7 +31,7 @@ var (
 	proxyURL        = flag.String("proxy.url", "", "AHV Proxy URL to connect to API https://1.2.3.4:8100")
 	proxyUsername   = flag.String("proxy.username", "veeam", "Proxy Username")
 	proxyPassword   = flag.String("proxy.password", "veeam", "Proxy User Password")
-	listenAddress   = flag.String("listen-address", ":9760", "The address to lisiten on for HTTP requests.")
+	listenAddress   = flag.String("listen-address", ":9405", "The address to lisiten on for HTTP requests.")
 	logLevel        = flag.String("log.level", "WARNING", "Set debug level")
 	exporterConfig  = flag.String("exporter.conf", "", "Config file for multiple sections")
 )

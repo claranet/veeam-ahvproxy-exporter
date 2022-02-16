@@ -208,65 +208,65 @@ func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 	g.Set(protstatus["totalVmsCount"].(float64))
 	g.Collect(ch)
 
-	var policies map[string]interface{}
+	var policies []map[string]interface{}
 	resp, _ = e.api.makeRequest("GET", "/api/v1/policies/")
 	data := json.NewDecoder(resp.Body)
 	data.Decode(&policies)
 
 	g = e.metrics["job_count"].WithLabelValues()
-	log.Debug(policies["MembersCount"].(float64))
-	g.Set(e.valueToFloat64(policies["MembersCount"].(float64)))
+	log.Debug( len(policies) )
+	g.Set(e.valueToFloat64(len(policies)))
 	g.Collect(ch)
 
-	for _, p := range policies["Members"].([]interface{}) {
-		policy := p.(map[string]interface{})
-		urlpath := policy["@odata.id"].(string)
-		resp, _ = e.api.makeRequest("GET", urlpath)
-		var ent map[string]interface{}
+	for _, policy := range policies {
+		// policy := p.(map[string]interface{})
+		// urlpath := policy["@odata.id"].(string)
+		// resp, _ = e.api.makeRequest("GET", urlpath)
+		// var ent map[string]interface{}
 
-		data = json.NewDecoder(resp.Body)
-		data.Decode(&ent)
+		// data = json.NewDecoder(resp.Body)
+		// data.Decode(&ent)
 
-		// labelValues := []string{ent["Id"].(string), ent["name"].(string)}
-		g := e.metrics["job_vms_count"].WithLabelValues(ent["Id"].(string), ent["name"].(string), ent["type"].(string))
-		g.Set(e.valueToFloat64(ent["vmsCount"]))
+		// labelValues := []string{policy["Id"].(string), policy["name"].(string)}
+		g := e.metrics["job_vms_count"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
+		g.Set(e.valueToFloat64(policy["vmsCount"]))
 		g.Collect(ch)
 
-		g = e.metrics["job_last_run"].WithLabelValues(ent["Id"].(string), ent["name"].(string), ent["type"].(string))
-		g.Set(e.dateToUnixTimestamp(ent["lastRun"].(string)))
+		g = e.metrics["job_last_run"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
+		g.Set(e.dateToUnixTimestamp(policy["lastRun"].(string)))
 		g.Collect(ch)
 
 		var startTimestamp, jobState float64
-		startTime := ent["startTime"].(string)
+		startTime := policy["startTime"].(string)
 		startTimestamp = 0
 		jobState = 0
 		if startTime != "Disabled" {
 			startTimestamp = e.dateToUnixTimestamp(startTime)
 			jobState = 1
 		}
-		g = e.metrics["job_next_run"].WithLabelValues(ent["Id"].(string), ent["name"].(string), ent["type"].(string))
+		g = e.metrics["job_next_run"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
 		g.Set(startTimestamp)
 		g.Collect(ch)
 		
-		g = e.metrics["job_state"].WithLabelValues(ent["Id"].(string), ent["name"].(string), ent["type"].(string))
+		g = e.metrics["job_state"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
 		g.Set(jobState)
 		g.Collect(ch)
 
-		g = e.metrics["job_last_scheduled"].WithLabelValues(ent["Id"].(string), ent["name"].(string), ent["type"].(string))
-		g.Set(e.dateToUnixTimestamp(ent["lastStartRun"].(string)))
+		g = e.metrics["job_last_scheduled"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
+		g.Set(e.dateToUnixTimestamp(policy["lastStartRun"].(string)))
 		g.Collect(ch)
 
-		g = e.metrics["job_creation_date"].WithLabelValues(ent["Id"].(string), ent["name"].(string), ent["type"].(string))
-		g.Set(e.dateToUnixTimestamp(ent["creationDate"].(string)))
+		g = e.metrics["job_creation_date"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
+		g.Set(e.dateToUnixTimestamp(policy["creationDate"].(string)))
 		g.Collect(ch)
 
-		g = e.metrics["job_modification_date"].WithLabelValues(ent["Id"].(string), ent["name"].(string), ent["type"].(string))
-		g.Set(e.dateToUnixTimestamp(ent["modificationDate"].(string)))
+		g = e.metrics["job_modification_date"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
+		g.Set(e.dateToUnixTimestamp(policy["modificationDate"].(string)))
 		g.Collect(ch)
 
-		status := strings.ToLower(ent["status"].(string))
+		status := strings.ToLower(policy["status"].(string))
 		value := 0
-		g = e.metrics["job_status"].WithLabelValues(ent["Id"].(string), ent["name"].(string), ent["type"].(string), status)
+		g = e.metrics["job_status"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string), status)
 		switch status {
 		  case "success": value = 0
 			default: value = 1
@@ -274,19 +274,19 @@ func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 		g.Set(e.valueToFloat64(value))
 		g.Collect(ch)
 
-		e.CollectJobVms(ent["Id"].(string), ent["vmsUids"].([]interface{}), ch)
+		e.CollectJobVms(policy["Id"].(string), ch)
 	}
 }
 
-func (e *ahvProxyExporter) CollectJobVms(jobid string, vmids []interface{}, ch chan<- prometheus.Metric) {
-	for _, vmid := range vmids {
-		urlpath := fmt.Sprintf("/api/v1/vms/%s", vmid.(string))
-		resp, _ := e.api.makeRequest("GET", urlpath)
-		
-		var ent map[string]interface{}
-		data := json.NewDecoder(resp.Body)
-		data.Decode(&ent)
+func (e *ahvProxyExporter) CollectJobVms(jobid string, ch chan<- prometheus.Metric) {
+	urlpath := fmt.Sprintf("/api/v1/policies/%s/vms", jobid)
+	resp, _ := e.api.makeRequest("GET", urlpath)
+	
+	var vmlist []map[string]interface{}
+	data := json.NewDecoder(resp.Body)
+	data.Decode(&vmlist)
 
+	for _, ent := range vmlist {
 		g := e.metrics["job_vm_restore_points"].WithLabelValues(jobid, ent["Id"].(string), ent["name"].(string))
 		g.Set(ent["recoveryPoints"].(float64))
 		g.Collect(ch)

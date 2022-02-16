@@ -58,6 +58,7 @@ func (g *AHVProxy) makeRequestWithParams(reqType string, action string, p Reques
 	
 	req.Header.Set("Content-Type", "text/json")
 	req.Header.Set("Accept", "text/json")
+	req.Header.Set("UserAgentInternal", "webfrontend/1.0")
 	if len(g.token) > 0  {
 	  req.Header.Set("Authorization", g.token)
 	}
