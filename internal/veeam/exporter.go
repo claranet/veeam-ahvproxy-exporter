@@ -31,6 +31,8 @@ type ahvProxyExporter struct {
 
 // ValueToFloat64 converts given value to Float64
 func (e *ahvProxyExporter) valueToFloat64(value interface{}) float64 {
+	log.Tracef("Convert '%v'(%T) to float64", value, value)
+
 	var v float64
 	switch value.(type) {
 	case int:
@@ -51,7 +53,7 @@ func (e *ahvProxyExporter) dateToUnixTimestamp(value string) float64 {
 
 	layout := "1/2/2006 3:04:05 PM"
 	t, _ := time.Parse(layout, value)
-	log.Debugf("Convert '%s' to Timestamp '%s'",value, t.Unix())
+	log.Tracef("Convert '%s' to Timestamp '%d'",value, t.Unix())
 	return float64(t.Unix())
 	
 }

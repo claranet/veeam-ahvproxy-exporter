@@ -43,7 +43,8 @@ func (g *AHVProxy) makeRequestWithParams(reqType string, action string, p Reques
 	_url += strings.Trim(action, "/") + "/"
 
 	log.Debugf("URL: %s", _url)
-
+	log.Debugf("Payload: %v", p.body)
+	
 	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	var netClient = http.Client{Transport: tr}
 
@@ -79,7 +80,6 @@ func (g *AHVProxy) makeRequestWithParams(reqType string, action string, p Reques
 func (g *AHVProxy) login() {
 	authUrl := "/api/v1/Account/login"
 	payload := fmt.Sprintf(`{"@odata.type":"LoginData","Password":"%s","Username":"%s"}`, g.password, g.username)
-	log.Print(payload)
 	params := RequestParams{
 		body: payload,
 	}
