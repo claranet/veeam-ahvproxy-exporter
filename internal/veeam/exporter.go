@@ -33,10 +33,13 @@ type ahvProxyExporter struct {
 func (e *ahvProxyExporter) valueToFloat64(value interface{}) float64 {
 	var v float64
 	switch value.(type) {
+	case int:
+	  v = float64(value.(int))
+		break
 	case float64:
 		v = value.(float64)
 		break
-	case string:
+	default:
 		v, _ = strconv.ParseFloat(value.(string), 64)
 		break
 	}
@@ -215,7 +218,7 @@ func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 
 	g = e.metrics["job_count"].WithLabelValues()
 	log.Debug( len(policies) )
-	g.Set(e.valueToFloat64(len(policies)))
+	g.Set( e.valueToFloat64(len(policies)) )
 	g.Collect(ch)
 
 	for _, policy := range policies {
