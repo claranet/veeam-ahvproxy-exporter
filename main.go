@@ -11,7 +11,7 @@
 package main
 
 import (
-	"./internal/veeam"
+	"github.com/claranet/veeam_ahvproxy"
 
 	"flag"
 	"net/http"

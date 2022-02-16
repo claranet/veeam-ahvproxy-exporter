@@ -1,7 +1,7 @@
 version: "3"
 services:
   exporter:
-    image: local/veeam-ahvproxy-exporter
+    image: claranet/veeam-ahvproxy-exporter
     build: .
     command:
       - "-log.level=DEBUG"
