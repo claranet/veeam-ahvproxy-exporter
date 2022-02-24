@@ -167,7 +167,7 @@ func (e *ahvProxyExporter) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (e *ahvProxyExporter) DescribeJobVm(ch chan<- *prometheus.Desc) {
-	job_vm_labels := []string{"job_id", "vm_id", "vm_name"}
+	job_vm_labels := []string{"job_id", "job_name", "vm_id", "vm_name"}
 	e.metrics["job_vm_last_success"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_vm_last_success",
@@ -279,11 +279,11 @@ func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 		g.Set(e.valueToFloat64(value))
 		g.Collect(ch)
 
-		e.CollectJobVms(policy["Id"].(string), ch)
+		e.CollectJobVms(policy["Id"].(string), policy["name"].(string), ch)
 	}
 }
 
-func (e *ahvProxyExporter) CollectJobVms(jobid string, ch chan<- prometheus.Metric) {
+func (e *ahvProxyExporter) CollectJobVms(jobid string, jobname string, ch chan<- prometheus.Metric) {
 	urlpath := fmt.Sprintf("/api/v1/policies/%s/vms", jobid)
 	resp, _ := e.api.makeRequest("GET", urlpath)
 	
@@ -292,15 +292,15 @@ func (e *ahvProxyExporter) CollectJobVms(jobid string, ch chan<- prometheus.Metr
 	data.Decode(&vmlist)
 
 	for _, ent := range vmlist {
-		g := e.metrics["job_vm_restore_points"].WithLabelValues(jobid, ent["Id"].(string), ent["name"].(string))
+		g := e.metrics["job_vm_restore_points"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
 		g.Set(ent["recoveryPoints"].(float64))
 		g.Collect(ch)
 
-		g = e.metrics["job_vm_last_success"].WithLabelValues(jobid, ent["Id"].(string), ent["name"].(string))
+		g = e.metrics["job_vm_last_success"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
 		g.Set(e.dateToUnixTimestamp(ent["lastSuccess"].(string)))
 		g.Collect(ch)
 
-		g = e.metrics["job_vm_size_bytes"].WithLabelValues(jobid, ent["Id"].(string), ent["name"].(string))
+		g = e.metrics["job_vm_size_bytes"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
 		g.Set(ent["sizeInBytes"].(float64))
 		g.Collect(ch)
 
