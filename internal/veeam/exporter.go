@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"fmt"
+	// "fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
@@ -106,7 +106,7 @@ func (e *ahvProxyExporter) Describe(ch chan<- *prometheus.Desc) {
 				[]string{})
 	e.metrics["job_count"].Describe(ch)
 
-	jobs_labels := []string{"job_id", "job_name", "job_type"}
+	jobs_labels := []string{"job_id", "job_name"}
 	e.metrics["job_state"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
 				Name:      "job_state",
@@ -134,27 +134,6 @@ func (e *ahvProxyExporter) Describe(ch chan<- *prometheus.Desc) {
 				Help:      "Unix Timestamp of last run"},
 				jobs_labels)
 	e.metrics["job_last_run"].Describe(ch)
-
-	e.metrics["job_last_scheduled"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-				Namespace: e.namespace,
-				Name:      "job_last_scheduled",
-				Help:      "Unix Timestamp of last scheduled"},
-				jobs_labels)
-	e.metrics["job_last_scheduled"].Describe(ch)
-
-	e.metrics["job_creation_date"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-				Namespace: e.namespace,
-				Name:      "job_creation_date",
-				Help:      "Unix Timestamp of when the job was created"},
-				jobs_labels)
-	e.metrics["job_creation_date"].Describe(ch)
-
-	e.metrics["job_modification_date"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-				Namespace: e.namespace,
-				Name:      "job_modification_date",
-				Help:      "Unix Timestamp of when the job was modified"},
-				jobs_labels)
-	e.metrics["job_modification_date"].Describe(ch)
 
 	e.metrics["job_status"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: e.namespace,
@@ -195,83 +174,63 @@ func (e *ahvProxyExporter) DescribeJobVm(ch chan<- *prometheus.Desc) {
 func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 	log.Debug("Start Collecting ...")
 	var protstatus map[string]interface{}
-	resp, _ := e.api.makeRequest("GET", "/api/v1/Dashboard/protstatus/")
+	resp, _ := e.api.makeRequest("GET", "/api/v4/dashboard/protectedVms")
 	decoder := json.NewDecoder(resp.Body)
 	decoder.Decode(&protstatus)
 	log.Debugf("Prection state: %v", protstatus)
 
 	g := e.metrics["protected_vms"].WithLabelValues()
-	g.Set(protstatus["protectedVmsCount"].(float64))
+	g.Set(protstatus["protectedVms"].(float64))
 	g.Collect(ch)
 	g  = e.metrics["unprotected_vms"].WithLabelValues()
-	g.Set(protstatus["notProtectedVmsCount"].(float64))
+	g.Set(protstatus["unprotectedVms"].(float64))
 	g.Collect(ch)
 	g  = e.metrics["snapshot_protected_vms"].WithLabelValues()
-	g.Set(protstatus["protectedVmsWithSnapshotsCount"].(float64))
+	g.Set(protstatus["protectedVmsWithSnapshots"].(float64))
 	g.Collect(ch)
 	g  = e.metrics["total_vms"].WithLabelValues()
-	g.Set(protstatus["totalVmsCount"].(float64))
+	g.Set(protstatus["totalVms"].(float64))
 	g.Collect(ch)
 
-	var policies []map[string]interface{}
-	resp, _ = e.api.makeRequest("GET", "/api/v1/policies/")
+	var result map[string]interface{}
+	resp, _ = e.api.makeRequest("GET", "/api/v4/jobs/")
 	data := json.NewDecoder(resp.Body)
-	data.Decode(&policies)
+	data.Decode(&result)
 
 	g = e.metrics["job_count"].WithLabelValues()
-	log.Debug( len(policies) )
-	g.Set( e.valueToFloat64(len(policies)) )
+	g.Set( e.valueToFloat64( result["totalCount"] ) )
 	g.Collect(ch)
 
-	for _, policy := range policies {
-		// policy := p.(map[string]interface{})
-		// urlpath := policy["@odata.id"].(string)
-		// resp, _ = e.api.makeRequest("GET", urlpath)
-		// var ent map[string]interface{}
-
-		// data = json.NewDecoder(resp.Body)
-		// data.Decode(&ent)
-
-		// labelValues := []string{policy["Id"].(string), policy["name"].(string)}
-		g := e.metrics["job_vms_count"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
-		g.Set(e.valueToFloat64(policy["vmsCount"]))
+	for _, p := range result["results"].([]interface{}) {
+		policy := p.( map[string]interface{} )
+		
+		g := e.metrics["job_vms_count"].WithLabelValues(policy["id"].(string), policy["name"].(string))
+		g.Set(e.valueToFloat64(policy["objects"]))
 		g.Collect(ch)
 
-		g = e.metrics["job_last_run"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
-		g.Set(e.dateToUnixTimestamp(policy["lastRun"].(string)))
+		g = e.metrics["job_last_run"].WithLabelValues(policy["id"].(string), policy["name"].(string))
+		g.Set(e.dateToUnixTimestamp(policy["lastRunUtc"].(string)))
 		g.Collect(ch)
 
 		var startTimestamp, jobState float64
-		startTime := policy["startTime"].(string)
+		startTime := policy["nextRunUtc"].(string)
 		startTimestamp = 0
 		jobState = 0
 		if startTime != "Disabled" {
 			startTimestamp = e.dateToUnixTimestamp(startTime)
 			jobState = 1
 		}
-		g = e.metrics["job_next_run"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
+		g = e.metrics["job_next_run"].WithLabelValues(policy["id"].(string), policy["name"].(string))
 		g.Set(startTimestamp)
 		g.Collect(ch)
 		
-		g = e.metrics["job_state"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
+		g = e.metrics["job_state"].WithLabelValues(policy["id"].(string), policy["name"].(string))
 		g.Set(jobState)
-		g.Collect(ch)
-
-		g = e.metrics["job_last_scheduled"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
-		g.Set(e.dateToUnixTimestamp(policy["lastStartRun"].(string)))
-		g.Collect(ch)
-
-		g = e.metrics["job_creation_date"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
-		g.Set(e.dateToUnixTimestamp(policy["creationDate"].(string)))
-		g.Collect(ch)
-
-		g = e.metrics["job_modification_date"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string))
-		g.Set(e.dateToUnixTimestamp(policy["modificationDate"].(string)))
 		g.Collect(ch)
 
 		status := strings.ToLower(policy["status"].(string))
 		value := 0
-		g = e.metrics["job_status"].WithLabelValues(policy["Id"].(string), policy["name"].(string), policy["type"].(string), status)
+		g = e.metrics["job_status"].WithLabelValues(policy["id"].(string), policy["name"].(string), status)
 		switch status {
 		  case "success": value = 0
 			default: value = 1
@@ -279,33 +238,33 @@ func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 		g.Set(e.valueToFloat64(value))
 		g.Collect(ch)
 
-		e.CollectJobVms(policy["Id"].(string), policy["name"].(string), ch)
+		// e.CollectJobVms(policy["id"].(string), policy["name"].(string), ch)
 	}
 }
 
-func (e *ahvProxyExporter) CollectJobVms(jobid string, jobname string, ch chan<- prometheus.Metric) {
-	urlpath := fmt.Sprintf("/api/v1/policies/%s/vms", jobid)
-	resp, _ := e.api.makeRequest("GET", urlpath)
+// func (e *ahvProxyExporter) CollectJobVms(jobid string, jobname string, ch chan<- prometheus.Metric) {
+// 	urlpath := fmt.Sprintf("/api/v4/jobs/%s/vms", jobid)
+// 	resp, _ := e.api.makeRequest("GET", urlpath)
 	
-	var vmlist []map[string]interface{}
-	data := json.NewDecoder(resp.Body)
-	data.Decode(&vmlist)
+// 	var vmlist []map[string]interface{}
+// 	data := json.NewDecoder(resp.Body)
+// 	data.Decode(&vmlist)
 
-	for _, ent := range vmlist {
-		g := e.metrics["job_vm_restore_points"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
-		g.Set(ent["recoveryPoints"].(float64))
-		g.Collect(ch)
+// 	for _, ent := range vmlist {
+// 		g := e.metrics["job_vm_restore_points"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
+// 		g.Set(ent["recoveryPoints"].(float64))
+// 		g.Collect(ch)
 
-		g = e.metrics["job_vm_last_success"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
-		g.Set(e.dateToUnixTimestamp(ent["lastSuccess"].(string)))
-		g.Collect(ch)
+// 		g = e.metrics["job_vm_last_success"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
+// 		g.Set(e.dateToUnixTimestamp(ent["lastSuccess"].(string)))
+// 		g.Collect(ch)
 
-		g = e.metrics["job_vm_size_bytes"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
-		g.Set(ent["sizeInBytes"].(float64))
-		g.Collect(ch)
+// 		g = e.metrics["job_vm_size_bytes"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
+// 		g.Set(ent["sizeInBytes"].(float64))
+// 		g.Collect(ch)
 
-	}
-}
+// 	}
+// }
 
 
 

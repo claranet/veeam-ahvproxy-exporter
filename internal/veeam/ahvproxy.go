@@ -57,11 +57,11 @@ func (g *AHVProxy) makeRequestWithParams(reqType string, action string, p Reques
 		log.Fatal(err)
 	}
 	
-	req.Header.Set("Content-Type", "text/json")
-	req.Header.Set("Accept", "text/json")
-	req.Header.Set("UserAgentInternal", "webfrontend/1.0")
+	// req.Header.Set("UserAgentInternal", "webfrontend/1.0")
 	if len(g.token) > 0  {
-	  req.Header.Set("Authorization", g.token)
+		req.Header.Set("Content-Type", "text/json")
+		req.Header.Set("Accept", "text/json")
+	  req.Header.Set("Authorization", fmt.Sprintf(`Bearer %s`,g.token))
 	}
 
 	resp, err := netClient.Do(req)
@@ -78,16 +78,27 @@ func (g *AHVProxy) makeRequestWithParams(reqType string, action string, p Reques
 }
 
 func (g *AHVProxy) login() {
-	authUrl := "/api/v1/Account/login"
-	payload := fmt.Sprintf(`{"@odata.type":"LoginData","Password":"%s","Username":"%s"}`, g.password, g.username)
-	params := RequestParams{
-		body: payload,
+	_url := strings.Trim(g.url, "/")
+	_url += "/api/oauth2/token"
+
+	var payload = url.Values{}
+	payload.Add("grantType", "password")
+	payload.Add("userName", g.username)
+	payload.Add("password", g.password)
+
+	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	client := http.Client{Transport: tr}
+
+	resp, err := client.PostForm(_url, payload)
+	if err != nil {
+		log.Fatal(err)
+		return
 	}
-	resp, _ := g.makeRequestWithParams("POST", authUrl, params)
+
 	var data map[string]string
 	decoder := json.NewDecoder(resp.Body)
 	decoder.Decode(&data)
-	g.token = data["token"]
+	g.token = data["accessToken"]
 }
 
 func NewVeeamAhvProxy(url string, username string, password string) *AHVProxy {
