@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	// "fmt"
+	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
@@ -173,6 +173,7 @@ func (e *ahvProxyExporter) DescribeJobVm(ch chan<- *prometheus.Desc) {
 // See https://github.com/prometheus/client_golang/blob/master/prometheus/collector.go
 func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 	log.Debug("Start Collecting ...")
+
 	var protstatus map[string]interface{}
 	resp, _ := e.api.makeRequest("GET", "/api/v4/dashboard/protectedVms")
 	decoder := json.NewDecoder(resp.Body)
@@ -201,36 +202,48 @@ func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 	g.Set( e.valueToFloat64( result["totalCount"] ) )
 	g.Collect(ch)
 
-	for _, p := range result["results"].([]interface{}) {
-		policy := p.( map[string]interface{} )
-		
-		g := e.metrics["job_vms_count"].WithLabelValues(policy["id"].(string), policy["name"].(string))
-		g.Set(e.valueToFloat64(policy["objects"]))
+	vmStack := make(map[string]map[string]string)
+	var resultList []interface{} = result["results"].([]interface{})
+	for _, j := range resultList {
+		job := j.(map[string]interface{})
+
+		var jobId, jobName string = job["id"].(string), job["name"].(string)
+
+		g := e.metrics["job_vms_count"].WithLabelValues(jobId, jobName)
+		g.Set( e.valueToFloat64( job["objects"] ) )
 		g.Collect(ch)
 
-		g = e.metrics["job_last_run"].WithLabelValues(policy["id"].(string), policy["name"].(string))
-		g.Set(e.dateToUnixTimestamp(policy["lastRunUtc"].(string)))
+		g = e.metrics["job_last_run"].WithLabelValues(jobId, jobName)
+		g.Set(e.dateToUnixTimestamp( job["lastRunUtc"].(string) ))
 		g.Collect(ch)
+
+		// Iterate over vm ids in job settings and
+		// push them to the stack
+		// this results in a mapping taple of vmid => ( job )
+		var settings map[string]interface{} = job["settings"].(map[string]interface{})
+		for _, id := range settings["vmIds"].([]interface{}) {
+			vmStack[id.(string)] = map[string]string{"jobName": jobName, "jobId": jobId}
+		}
 
 		var startTimestamp, jobState float64
-		startTime := policy["nextRunUtc"].(string)
+		startTime := job["nextRunUtc"].(string)
 		startTimestamp = 0
 		jobState = 0
 		if startTime != "Disabled" {
 			startTimestamp = e.dateToUnixTimestamp(startTime)
 			jobState = 1
 		}
-		g = e.metrics["job_next_run"].WithLabelValues(policy["id"].(string), policy["name"].(string))
+		g = e.metrics["job_next_run"].WithLabelValues(jobId, jobName)
 		g.Set(startTimestamp)
 		g.Collect(ch)
 		
-		g = e.metrics["job_state"].WithLabelValues(policy["id"].(string), policy["name"].(string))
+		g = e.metrics["job_state"].WithLabelValues(jobId, jobName)
 		g.Set(jobState)
 		g.Collect(ch)
 
-		status := strings.ToLower(policy["status"].(string))
+		status := strings.ToLower( job["status"].(string) )
 		value := 0
-		g = e.metrics["job_status"].WithLabelValues(policy["id"].(string), policy["name"].(string), status)
+		g = e.metrics["job_status"].WithLabelValues(jobId, jobName, status)
 		switch status {
 		  case "success": value = 0
 			default: value = 1
@@ -238,34 +251,56 @@ func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 		g.Set(e.valueToFloat64(value))
 		g.Collect(ch)
 
-		// e.CollectJobVms(policy["id"].(string), policy["name"].(string), ch)
+		// // e.CollectJobVms(policy["id"].(string), policy["name"].(string), ch)
+	}
+
+	var clusters []map[string]interface{}
+	resp, _ = e.api.makeRequest("GET", "/api/v4/clusters/")
+	decoder = json.NewDecoder(resp.Body)
+	decoder.Decode(&clusters)
+
+	for _, cluster := range clusters {
+		var clusterId string = cluster["id"].(string)
+
+		var result map[string]interface{}
+		resp, _ = e.api.makeRequest("GET", fmt.Sprintf("/api/v4/clusters/%s/vms", clusterId))
+		decoder = json.NewDecoder(resp.Body)
+		decoder.Decode(&result)
+
+		var resultList []interface{} = result["results"].([]interface{})
+		for _, v := range resultList {
+			vm := v.(map[string]interface{})
+			var jobId = vmStack[vm["id"].(string)]["jobId"]
+			var jobName = vmStack[vm["id"].(string)]["jobName"]
+			if jobId == "" {
+				continue
+			}
+			g = e.metrics["job_vm_size_bytes"].WithLabelValues(jobId, jobName, vm["id"].(string), vm["name"].(string))
+			g.Set(vm["vmSize"].(float64))
+			g.Collect(ch)
+		}
+
+		resp, _ = e.api.makeRequest("GET", "/api/v4/protectedVms")
+		decoder = json.NewDecoder(resp.Body)
+		decoder.Decode(&result)
+		resultList = result["results"].([]interface{})
+		for _, v := range resultList {
+			vm := v.(map[string]interface{})
+			var jobId = vmStack[vm["id"].(string)]["jobId"]
+			var jobName = vmStack[vm["id"].(string)]["jobName"]
+			if jobId == "" {
+				continue
+			}
+			g := e.metrics["job_vm_restore_points"].WithLabelValues(jobId, jobName, vm["id"].(string), vm["name"].(string))
+			g.Set(vm["backups"].(float64))
+			g.Collect(ch)
+
+			g = e.metrics["job_vm_last_success"].WithLabelValues(jobId, jobName, vm["id"].(string), vm["name"].(string))
+			g.Set(e.dateToUnixTimestamp(vm["lastProtectionDateUtc"].(string)))
+			g.Collect(ch)
+		}
 	}
 }
-
-// func (e *ahvProxyExporter) CollectJobVms(jobid string, jobname string, ch chan<- prometheus.Metric) {
-// 	urlpath := fmt.Sprintf("/api/v4/jobs/%s/vms", jobid)
-// 	resp, _ := e.api.makeRequest("GET", urlpath)
-	
-// 	var vmlist []map[string]interface{}
-// 	data := json.NewDecoder(resp.Body)
-// 	data.Decode(&vmlist)
-
-// 	for _, ent := range vmlist {
-// 		g := e.metrics["job_vm_restore_points"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
-// 		g.Set(ent["recoveryPoints"].(float64))
-// 		g.Collect(ch)
-
-// 		g = e.metrics["job_vm_last_success"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
-// 		g.Set(e.dateToUnixTimestamp(ent["lastSuccess"].(string)))
-// 		g.Collect(ch)
-
-// 		g = e.metrics["job_vm_size_bytes"].WithLabelValues(jobid, jobname, ent["Id"].(string), ent["name"].(string))
-// 		g.Set(ent["sizeInBytes"].(float64))
-// 		g.Collect(ch)
-
-// 	}
-// }
-
 
 
 // NewHostsCollector
