@@ -10,3 +10,9 @@ services:
       - 9760:9760
     volumes:
       - ./config.yml:/config.yml
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./env/prometheus.yml:/etc/prometheus/prometheus.yml
