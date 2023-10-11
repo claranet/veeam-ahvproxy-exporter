@@ -227,7 +227,12 @@ func (e *ahvProxyExporter) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		var startTimestamp, jobState float64
-		startTime := job["nextRunUtc"].(string)
+		var startTime string
+		if job["nextRunUtc"] == nil {
+			startTime = "Disabled"
+		} else {
+			startTime = job["nextRunUtc"].(string)
+		}
 		startTimestamp = 0
 		jobState = 0
 		if startTime != "Disabled" {
