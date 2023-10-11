@@ -35,5 +35,5 @@ jobs:
           push: true
           tags: |
             claranet/veeam-ahvproxy-exporter:latest
-            claranet/veeam-ahvproxy-exporter:v1.0.1
+            claranet/veeam-ahvproxy-exporter:v1.0.2
           
